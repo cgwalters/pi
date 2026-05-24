@@ -15,6 +15,7 @@ import type {
 	SessionStorage,
 	SessionTreeEntry,
 	ThinkingLevelChangeEntry,
+	TrimToolResultEntry,
 } from "../types.ts";
 import { SessionError } from "../types.ts";
 
@@ -22,6 +23,14 @@ export function buildSessionContext(pathEntries: SessionTreeEntry[]): SessionCon
 	let thinkingLevel = "off";
 	let model: { provider: string; modelId: string } | null = null;
 	let compaction: CompactionEntry | null = null;
+
+	// Collect trims: last trim per toolCallId wins
+	const trimsByToolCallId = new Map<string, TrimToolResultEntry>();
+	for (const entry of pathEntries) {
+		if (entry.type === "trim_tool_result") {
+			trimsByToolCallId.set(entry.toolCallId, entry);
+		}
+	}
 
 	for (const entry of pathEntries) {
 		if (entry.type === "thinking_level_change") {
@@ -38,7 +47,14 @@ export function buildSessionContext(pathEntries: SessionTreeEntry[]): SessionCon
 	const messages: AgentMessage[] = [];
 	const appendMessage = (entry: SessionTreeEntry) => {
 		if (entry.type === "message") {
-			messages.push(entry.message as AgentMessage);
+			let msg = entry.message as AgentMessage;
+			if (msg.role === "toolResult") {
+				const trim = trimsByToolCallId.get(msg.toolCallId);
+				if (trim) {
+					msg = { ...msg, content: trim.summary };
+				}
+			}
+			messages.push(msg);
 		} else if (entry.type === "custom_message") {
 			messages.push(
 				createCustomMessage(
@@ -217,6 +233,22 @@ export class Session<TMetadata extends SessionMetadata = SessionMetadata> {
 			targetId,
 			label,
 		} satisfies LabelEntry);
+	}
+
+	async appendTrim(
+		toolCallId: string,
+		summary: (TextContent | ImageContent)[],
+		source: "agent" | "user",
+	): Promise<string> {
+		return this.appendTypedEntry({
+			type: "trim_tool_result",
+			id: await this.storage.createEntryId(),
+			parentId: await this.storage.getLeafId(),
+			timestamp: new Date().toISOString(),
+			toolCallId,
+			summary,
+			source,
+		} satisfies TrimToolResultEntry);
 	}
 
 	async appendSessionName(name: string): Promise<string> {

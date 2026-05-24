@@ -50,6 +50,7 @@ export {
 	type ReadToolInput,
 	type ReadToolOptions,
 } from "./read.ts";
+export { createTrimToolDefinition, type TrimToolDetails, type TrimToolInput } from "./trim.ts";
 export {
 	DEFAULT_MAX_BYTES,
 	DEFAULT_MAX_LINES,
@@ -80,8 +81,17 @@ import { createWriteTool, createWriteToolDefinition, type WriteToolOptions } fro
 
 export type Tool = AgentTool<any>;
 export type ToolDef = ToolDefinition<any, any>;
-export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls";
-export const allToolNames: Set<ToolName> = new Set(["read", "bash", "edit", "write", "grep", "find", "ls"]);
+export type ToolName = "read" | "bash" | "edit" | "write" | "grep" | "find" | "ls" | "trim_tool_result";
+export const allToolNames: Set<ToolName> = new Set([
+	"read",
+	"bash",
+	"edit",
+	"write",
+	"grep",
+	"find",
+	"ls",
+	"trim_tool_result",
+]);
 
 export interface ToolsOptions {
 	read?: ReadToolOptions;
@@ -153,7 +163,10 @@ export function createReadOnlyToolDefinitions(cwd: string, options?: ToolsOption
 	];
 }
 
-export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<ToolName, ToolDef> {
+/** Tool names that only need cwd (excludes trim_tool_result which needs a SessionManager). */
+type CwdToolName = Exclude<ToolName, "trim_tool_result">;
+
+export function createAllToolDefinitions(cwd: string, options?: ToolsOptions): Record<CwdToolName, ToolDef> {
 	return {
 		read: createReadToolDefinition(cwd, options?.read),
 		bash: createBashToolDefinition(cwd, options?.bash),
@@ -183,7 +196,7 @@ export function createReadOnlyTools(cwd: string, options?: ToolsOptions): Tool[]
 	];
 }
 
-export function createAllTools(cwd: string, options?: ToolsOptions): Record<ToolName, Tool> {
+export function createAllTools(cwd: string, options?: ToolsOptions): Record<CwdToolName, Tool> {
 	return {
 		read: createReadTool(cwd, options?.read),
 		bash: createBashTool(cwd, options?.bash),

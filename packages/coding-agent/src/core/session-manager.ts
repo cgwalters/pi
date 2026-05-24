@@ -108,6 +108,17 @@ export interface LabelEntry extends SessionEntryBase {
 	label: string | undefined;
 }
 
+/** Trim entry: replaces a tool result's content with a summary. */
+export interface TrimToolResultEntry extends SessionEntryBase {
+	type: "trim_tool_result";
+	/** The toolCallId of the tool result to trim. */
+	toolCallId: string;
+	/** Concise replacement content for the tool result. */
+	summary: (TextContent | ImageContent)[];
+	/** Who initiated the trim. */
+	source: "agent" | "user";
+}
+
 /** Session metadata entry (e.g., user-defined display name). */
 export interface SessionInfoEntry extends SessionEntryBase {
 	type: "session_info";
@@ -144,7 +155,8 @@ export type SessionEntry =
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| SessionInfoEntry;
+	| SessionInfoEntry
+	| TrimToolResultEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -351,10 +363,18 @@ export function buildSessionContext(
 		current = current.parentId ? byId.get(current.parentId) : undefined;
 	}
 
-	// Extract settings and find compaction
+	// Extract settings, find compaction, and collect trims
 	let thinkingLevel = "off";
 	let model: { provider: string; modelId: string } | null = null;
 	let compaction: CompactionEntry | null = null;
+
+	// Collect trims: last trim per toolCallId wins
+	const trimsByToolCallId = new Map<string, TrimToolResultEntry>();
+	for (const entry of path) {
+		if (entry.type === "trim_tool_result") {
+			trimsByToolCallId.set(entry.toolCallId, entry);
+		}
+	}
 
 	for (const entry of path) {
 		if (entry.type === "thinking_level_change") {
@@ -377,7 +397,14 @@ export function buildSessionContext(
 
 	const appendMessage = (entry: SessionEntry) => {
 		if (entry.type === "message") {
-			messages.push(entry.message);
+			let msg = entry.message;
+			if (msg.role === "toolResult") {
+				const trim = trimsByToolCallId.get(msg.toolCallId);
+				if (trim) {
+					msg = { ...msg, content: trim.summary };
+				}
+			}
+			messages.push(msg);
 		} else if (entry.type === "custom_message") {
 			messages.push(
 				createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp),
@@ -1065,6 +1092,24 @@ export class SessionManager {
 			this.labelsById.delete(targetId);
 			this.labelTimestampsById.delete(targetId);
 		}
+		return entry.id;
+	}
+
+	/**
+	 * Trim a tool result, replacing its content with a summary in subsequent context builds.
+	 * The original content remains in the session file; the trim is an append-only patch.
+	 */
+	appendTrim(toolCallId: string, summary: (TextContent | ImageContent)[], source: "agent" | "user"): string {
+		const entry: TrimToolResultEntry = {
+			type: "trim_tool_result",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			toolCallId,
+			summary,
+			source,
+		};
+		this._appendEntry(entry);
 		return entry.id;
 	}
 

@@ -91,6 +91,7 @@ import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-promp
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
+import { createTrimToolDefinition } from "./tools/trim.ts";
 
 // ============================================================================
 // Skill Block Parsing
@@ -144,7 +145,8 @@ export type AgentSessionEvent =
 			errorMessage?: string;
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
-	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string };
+	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| { type: "tool_result_trimmed"; toolCallId: string; summary: string };
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
@@ -2365,6 +2367,21 @@ export class AgentSession {
 			Object.entries(baseToolDefinitions).map(([name, tool]) => [name, tool as ToolDefinition]),
 		);
 
+		// Add trim tool (needs SessionManager, so created separately)
+		if (!this._baseToolsOverride) {
+			const sm = this.sessionManager;
+			this._baseToolDefinitions.set(
+				"trim_tool_result",
+				createTrimToolDefinition(
+					() => sm,
+					(toolCallId, summary) => {
+						const text = summary.map((s) => s.text).join("");
+						this._emit({ type: "tool_result_trimmed", toolCallId, summary: text });
+					},
+				) as ToolDefinition,
+			);
+		}
+
 		const extensionsResult = this._resourceLoader.getExtensions();
 		if (options.flagValues) {
 			for (const [name, value] of options.flagValues) {
@@ -2387,7 +2404,7 @@ export class AgentSession {
 
 		const defaultActiveToolNames = this._baseToolsOverride
 			? Object.keys(this._baseToolsOverride)
-			: ["read", "bash", "edit", "write"];
+			: ["read", "bash", "edit", "write", "trim_tool_result"];
 		const baseActiveToolNames = options.activeToolNames ?? defaultActiveToolNames;
 		this._refreshToolRegistry({
 			activeToolNames: baseActiveToolNames,

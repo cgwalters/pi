@@ -210,6 +210,7 @@ export {
 	SessionManager,
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,
+	type TrimToolResultEntry,
 } from "./core/session-manager.ts";
 export {
 	type CompactionSettings,

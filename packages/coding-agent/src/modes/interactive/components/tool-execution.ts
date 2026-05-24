@@ -1,6 +1,6 @@
 import { Box, type Component, Container, getCapabilities, Image, Spacer, Text, type TUI } from "@earendil-works/pi-tui";
 import type { ToolDefinition, ToolRenderContext } from "../../../core/extensions/types.ts";
-import { createAllToolDefinitions, type ToolName } from "../../../core/tools/index.ts";
+import { createAllToolDefinitions } from "../../../core/tools/index.ts";
 import { getTextOutput as getRenderedTextOutput } from "../../../core/tools/render-utils.ts";
 import { convertToPng } from "../../../utils/image-convert.ts";
 import { theme } from "../theme/theme.ts";
@@ -39,6 +39,7 @@ export class ToolExecutionComponent extends Container {
 	};
 	private convertedImages: Map<number, { data: string; mimeType: string }> = new Map();
 	private hideComponent = false;
+	private trimmed = false;
 
 	constructor(
 		toolName: string,
@@ -54,7 +55,9 @@ export class ToolExecutionComponent extends Container {
 		this.toolCallId = toolCallId;
 		this.args = args;
 		this.toolDefinition = toolDefinition;
-		this.builtInToolDefinition = createAllToolDefinitions(cwd)[toolName as ToolName];
+		this.builtInToolDefinition = (createAllToolDefinitions(cwd) as Record<string, ToolDefinition | undefined>)[
+			toolName
+		];
 		this.showImages = options.showImages ?? true;
 		this.imageWidthCells = options.imageWidthCells ?? 60;
 		this.ui = ui;
@@ -141,7 +144,20 @@ export class ToolExecutionComponent extends Container {
 		if (!output) {
 			return undefined;
 		}
-		return new Text(theme.fg("toolOutput", output), 0, 0);
+		const prefix = this.trimmed ? theme.fg("dim", "(trimmed) ") : "";
+		return new Text(prefix + theme.fg("toolOutput", output), 0, 0);
+	}
+
+	getToolCallId(): string {
+		return this.toolCallId;
+	}
+
+	setTrimmed(summary: string): void {
+		this.trimmed = true;
+		this.updateResult({
+			content: [{ type: "text", text: summary }],
+			isError: false,
+		});
 	}
 
 	updateArgs(args: any): void {

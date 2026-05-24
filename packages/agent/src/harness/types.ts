@@ -391,6 +391,17 @@ export interface LabelEntry extends SessionTreeEntryBase {
 	label: string | undefined;
 }
 
+/** Trim entry: replaces a tool result's content with a summary. */
+export interface TrimToolResultEntry extends SessionTreeEntryBase {
+	type: "trim_tool_result";
+	/** The toolCallId of the tool result to trim. */
+	toolCallId: string;
+	/** Concise replacement content for the tool result. */
+	summary: (TextContent | ImageContent)[];
+	/** Who initiated the trim. */
+	source: "agent" | "user";
+}
+
 export interface SessionInfoEntry extends SessionTreeEntryBase {
 	type: "session_info"; // legacy name, kept for backwards compatibility
 	name?: string;
@@ -411,6 +422,7 @@ export type SessionTreeEntry =
 	| CustomMessageEntry
 	| LabelEntry
 	| SessionInfoEntry
+	| TrimToolResultEntry
 	| LeafEntry;
 
 export interface SessionContext {

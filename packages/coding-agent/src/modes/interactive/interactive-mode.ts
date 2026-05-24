@@ -278,6 +278,8 @@ export class InteractiveMode {
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
+	// All rendered tool components by toolCallId (for post-completion updates like trim)
+	private allToolComponents = new Map<string, ToolExecutionComponent>();
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
@@ -1610,6 +1612,7 @@ export class InteractiveMode {
 		this.streamingComponent = undefined;
 		this.streamingMessage = undefined;
 		this.pendingTools.clear();
+		this.allToolComponents.clear();
 		this.renderInitialMessages();
 	}
 
@@ -2744,6 +2747,7 @@ export class InteractiveMode {
 								component.setExpanded(this.toolOutputExpanded);
 								this.chatContainer.addChild(component);
 								this.pendingTools.set(content.id, component);
+								this.allToolComponents.set(content.id, component);
 							} else {
 								const component = this.pendingTools.get(content.id);
 								if (component) {
@@ -2814,6 +2818,7 @@ export class InteractiveMode {
 					this.chatContainer.addChild(component);
 					this.pendingTools.set(event.toolCallId, component);
 				}
+				this.allToolComponents.set(event.toolCallId, component);
 				component.markExecutionStarted();
 				this.ui.requestRender();
 				break;
@@ -2833,6 +2838,15 @@ export class InteractiveMode {
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
 					this.pendingTools.delete(event.toolCallId);
+					this.ui.requestRender();
+				}
+				break;
+			}
+
+			case "tool_result_trimmed": {
+				const component = this.allToolComponents.get(event.toolCallId);
+				if (component) {
+					component.setTrimmed(event.summary);
 					this.ui.requestRender();
 				}
 				break;
@@ -3125,6 +3139,7 @@ export class InteractiveMode {
 		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
 	): void {
 		this.pendingTools.clear();
+		this.allToolComponents.clear();
 		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
 
 		if (options.updateFooter) {
@@ -3168,6 +3183,7 @@ export class InteractiveMode {
 							component.updateResult({ content: [{ type: "text", text: errorMessage }], isError: true });
 						} else {
 							renderedPendingTools.set(content.id, component);
+							this.allToolComponents.set(content.id, component);
 						}
 					}
 				}
